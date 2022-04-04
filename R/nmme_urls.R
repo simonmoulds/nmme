@@ -6,52 +6,79 @@
 #' @param simulation_type Character.
 #' @param dataset Character.
 #' @param variable Character.
-#' @param x_lim Numeric.
-#' @param y_lim Numeric.
+#' @param xmin Numeric.
+#' @param xmax Numeric.
+#' @param ymin Numeric.
+#' @param ymax Numeric.
+#' @param all_members Logical.
+#' @param all_lead_times Logical.
 #' @param members Integer.
-#' @param lead_times Numeric.
+#' @param start_lead_time Numeric.
+#' @param end_lead_time Numeric.
 #' @param start_year Integer.
 #' @param start_month Integer.
 #' @param end_year Integer.
 #' @param end_month Integer.
+#' @param config List.
 #' @param ... Additional arguments.
 #'
-#' @return Character.
+#' @return List of character pairs.
 #'
 #' @examples
 #' \dontrun{
-#' sum(1:10)
+#' urls = name_urls()
+#' download_nmme(urls[1])
 #' }
-nmme_url <- function(model = "GFDL-SPEAR",
-                     simulation_type = "hindcast",
-                     dataset = "monthly",
-                     variable = "prec",
-                     xmin = -180,
-                     xmax = 180,
-                     ymin = -90,
-                     ymax = 90,
-                     members = NA,
-                     start_lead_time = 0.5,
-                     end_lead_time = 11.5,
-                     start_year = 1991,
-                     end_year = 2020,
-                     start_month = 1,
-                     end_month = 12,
-                     config = iri_config(),
-                     ...) {
+nmme_urls <- function(model = "GFDL-SPEAR",
+                      simulation_type = "hindcast",
+                      dataset = "monthly",
+                      variable = "prec",
+                      xmin = -180,
+                      xmax = 180,
+                      ymin = -90,
+                      ymax = 90,
+                      all_members = TRUE,
+                      all_lead_times = TRUE,
+                      members = NA,
+                      start_lead_time = 0.5,
+                      end_lead_time = 11.5,
+                      start_year = 1991,
+                      end_year = 2020,
+                      start_month = 1,
+                      end_month = 12,
+                      config = iri_config(),
+                      ...) {
 
-  ## TODO make this a data file
-  model_members = list("GFDL-SPEAR" = 1:15)
-  if (is.na(members)) { members = model_members[[model]] }
+  ## Apply consistent formatting
+  model <- tolower(model)
+  simulation_type <- tolower(simulation_type)
+  dataset <- tolower(dataset)
+  variable <- tolower(variable)
 
-  supported_models = names(config$sources$NMME)
-  if (!model %in% supported_models) {
-    stop(sprintf("Model %s not yet supported!", model))
+  ## TODO check_args(...) function
+  if (!model %in% names(config)) {
+    stop(sprintf("`model` %s not yet supported!", model))
   }
-  if (!simulation_type %in% c("hindcast", "forecast")) {
-    stop("`simulation_type` must be one of hindcast, forecast")
+  if (!simulation_type %in% names(config[[model]])) {
+    stop(sprintf("`simulation_type` %s not yet supported!", simulation_type))
   }
-  ## Check times
+  if (!dataset %in% names(config[[model]][[simulation_type]])) {
+    stop(sprintf("`dataset` %s not yet supported!", dataset))
+  }
+  model_spec = config[[model]][[simulation_type]][[dataset]]
+  if (!all_members) {
+    if (!all(members %in% model_spec$members)) {
+      stop("Some `members` are invalid!")
+    }
+  }
+  if (!all_lead_times) {
+    if (!start_lead_time %in% model_spec$lead_times) {
+      stop("`start_lead_time` is invalid!")
+    }
+    if (!end_lead_time %in% model_spec$lead_times) {
+      stop("`end_lead_time` is invalid!")
+    }
+  }
   if (end_year < start_year) {
     stop("`end_year` should be greater than or equal to `start_year`")
   }
@@ -112,17 +139,6 @@ nmme_url <- function(model = "GFDL-SPEAR",
     }
   }
   urls
-}
-
-download_nmme <- function(urls = nmme_url(),
-                          destdir = ".",
-                          overwrite = FALSE, ...) {
-  for (i in 1:length(urls)) {
-    url = urls[[i]][1]
-    destfile = file.path(destdir, urls[[i]][2])
-    download.file(url, destfile=destfile, ...)
-  }
-  NULL
 }
 
 format_lead_times <- function(start_lead_time, end_lead_time, ...) {

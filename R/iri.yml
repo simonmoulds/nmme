@@ -1,0 +1,28 @@
+---
+base_url: https://iridl.ldeo.columbia.edu
+sources:
+  Models:
+    NMME:
+      GFDL-SPEAR:
+        HINDCAST:
+          Monthly:
+            variables:
+              - h200
+              - prec
+              - sst
+              - T
+              - t_ref_max
+              - t_ref_min
+              - tref
+          mc9120:
+            variables:
+              - prec
+              - sst
+              - T
+              - tref
+          sc9120:
+            variables:
+              - prec
+              - sst
+              - T
+              - tref

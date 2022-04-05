@@ -11,7 +11,11 @@
 #' sum(1:10)
 #' }
 iri_config <- function(...) {
-  config = iri_spec$sources$models$nmme
+  config = iri_spec
   return(config)
 }
 
+nmme_config <- function(...) {
+  config = iri_spec$sources$models$nmme
+  return(config)
+}

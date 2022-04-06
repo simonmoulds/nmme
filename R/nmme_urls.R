@@ -11,7 +11,7 @@
 #' @param config List.
 #' @param ... Additional arguments.
 #'
-#' @return List of character pairs.
+#' @return List.
 #'
 #' @examples
 #' \dontrun{
@@ -21,177 +21,47 @@
 nmme_url <- function(model = "GFDL-SPEAR",
                      simulation_type = "hindcast",
                      dataset = "monthly",
-                     ## variable = "prec",
-                     ## start_init_time = c(1991, 1),
-                     ## end_init_time = c(2020, 12),
-                     ## variables = NA,
-                     ## point = NA,
-                     ## extent = NA,
-                     ## members = NA,
-                     ## lead_times = NA,
+                     variable = "prec",
                      config = nmme_config(),
                      ...) {
 
   ## This will check the selection is valid at the same time
-  model_config = get_model_config(model, simulation_type, dataset, config)
-  url_ext = list(
-    source = "SOURCES/.Models/.NMME",
-    model = paste0(".", toupper(model)),
-    simulation_type = paste0(".", toupper(simulation_type)),
-    dataset = paste0(".", toupper(dataset))
+  model_config = get_model_config(model, simulation_type, dataset, variable, config)
+  dataset = list(
+    source = tibble(name = "NMME", filter = "SOURCES/.Models/.NMME"),
+    model = tibble(name = toupper(model), filter = paste0(".", toupper(model))),
+    simulation_type = tibble(name = tolower(simulation_type), filter = paste0(".", toupper(simulation_type))),
+    dataset = tibble(name = tolower(dataset), filter = paste0(".", toupper(dataset))),
+    variable = tibble(name = tolower(variable), filter = paste0(".", tolower(variable)))
   )
   ## url = paste(config$base_url, url_ext, sep="/")
   ## TODO make this an S3 object?
-  list(url = url,
-       spec = list(model = model),
-       config = model_config)
+  obj = list(dataset = dataset,
+             filter = list(X = NA, Y = NA, L = NA, S = NA, M = NA),
+             config = model_config)
+  obj =
+    obj %>%
+    filter_init_time(model_config$start_init_time, model_config$end_init_time) %>%
+    filter_member(model_config$members)
+  obj
 }
 
-#' @param x
-#' @param start_init_time Integer.
-#' @param end_init_time Integer.
-filter_init_time <- function(x,
-                             start_init_time = as.yearmon("2000-01"),
-                             end_init_time = as.yearmon("2000-02")) {
-
-  start_init_time = zoo::as.yearmon(start_init_time)
-  end_init_time = zoo::as.yearmon(end_init_time)
-  check_init_times(start_init_time, end_init_time, model_config)
-  init_times = as.yearmon(seq(as.Date(start_init_time), as.Date(end_init_time), by = "month"))
-  S = rep(NA, length(init_times))
-  for (i in 1:length(init_times)) {
-    tm = init_times[i]
-    month = format(tm, "%b")
-    year = format(tm, "%Y")
-    S[i] = paste0("S/(0000 1 ", month, " ", year, ")VALUES")
+get_model_config <- function(model, simulation_type, dataset, variable, config, check = TRUE) {
+  ## Apply consistent formatting
+  model <- tolower(model)
+  simulation_type <- tolower(simulation_type)
+  dataset <- tolower(dataset)
+  ## variable <- tolower(variable)
+  if (check) {
+    c1 = check_model(model, config)
+    c2 = check_simulation_type(simulation_type, config[[model]])
+    c3 = check_dataset(dataset, config[[model]][[simulation_type]])
+    c4 = check_variable(variable, config[[model]][[simulation_type]][[dataset]])
+    ## TODO logging?
   }
-  x$url$init_times = S
-  x$spec$init_times = init_times %>% format("%Y%m")
-  x
+  model_config = config[[model]][[simulation_type]][[dataset]]
+  model_config
 }
-
-#' @param x
-#' @param members Integer.
-filter_member <- function(x, members) {
-  c1 = check_members(members, x$config)
-  members = trimws(format(round(members), nsmall = 1))
-  M = rep(NA, length(members))
-  for (i in 1:length(members)) {
-    M[i] = paste0("/M/(", members[i], ")VALUES")
-  }
-  x$url$members = M
-  x$spec$members = members
-  x
-}
-
-#' @param x
-#' @param lead_times Numeric.
-filter_lead_time <- function(x, lead_times) {
-  lead_times = sort(lead_times)
-  c1 = check_lead_times(lead_times, x$config)
-  lead_times = trimws(format(lead_times, nsmall = 1))
-  lead_times = paste0(lead_times, collapse = ", ")
-  L = paste0("/L/(", lead_times, ")VALUES")
-  x$url$lead_times = L
-  x$spec$lead_times = lead_times
-  x
-}
-
-filter_point <- function(x, xcoord, ycoord) {
-  x
-}
-
-filter_x_range <- function(xmin, xmax) {
-  ## "longitude is best specified as west to east, two east values or two west values, otherwise you can end up with the wrong half of the world (e.g. 0.5E to 355.5E will work much better than 0.5E to 0.5W)"
-  if (xmin > xmax)
-    stop("`xmin` must be less than `xmax`")
-  if (xmin == 0) {
-    xmn = "0"
-  } else if (xmin < 0) {
-    xmn = paste0(trimws(format(abs(floor(xmin)) + 0.5), nsmall = 1)), "W")
-  } else if (xmin > 0) {
-    xmn = paste0(trimws(format(floor(xmin) + 0.5, nsmall = 1)), "E")
-  }
-  if (xmax == 0) {
-    xmx = "0"
-  } else if (xmax < 0) {
-    xmx = paste0(trimws(format(abs(ceiling(xmax)) - 0.5, nsmall = 1)), "W")
-  } else if (xmax > 0) {
-    xmx = paste0(trimws(format(ceiling(xmax) - 0.5, nsmall = 1)), "E")
-  }
-  return(paste0("/X/(", xmn, ")", "(", xmx, ")RANGEEDGES"))
-}
-
-filter_y_range <- function(ymin, ymax) {
-  myfun <- function(y) {
-    if (y < 0) {
-      return(paste0(trimws(format(abs(y), nsmall = 1)), "S"))
-    } else {
-      return(paste0(trimws(format(y, nsmall = 1)), "N"))
-    }
-  }
-  if (ymin > ymax)
-    stop("`ymin` must be less than `ymax`")
-  ymn = myfun(ymin)
-  ymx = myfun(ymax)
-  return(paste0("/Y/(", ymn, ")", "(", ymx, ")RANGEEDGES"))
-}
-
-#' @param x
-#' @param xmin Numeric.
-#' @param xmax Numeric.
-#' @param ymin Numeric.
-#' @param ymax Numeric.
-filter_region <- function(x, xmin, xmax, ymin, ymax) {
-  ## TODO check extent is valid - are all models global?
-  X = filter_x_range(xmin, xmax)
-  Y = filter_y_range(ymin, ymax)
-  x$url$X = X
-  x$url$Y = Y
-  x$spec$X = c(xmin, xmax)
-  x$spec$Y = c(ymin, ymax)
-  x
-}
-
-filter_x_point <- function(x) {
-  if (x == 0) {
-    xv = "0"
-  } else if (x < 0) {
-    xv = paste0(trimws(format(abs(x), nsmall = 1)), "W")
-  } else if (xmin > 0) {
-    xv = paste0(trimws(format(c, nsmall = 1)), "E")
-  }
-  return(paste0("/X/(", xv, ")VALUES"))
-}
-
-filter_y_point <- function(y) {
-  myfun <- function(y) {
-    if (y < 0) {
-      return(paste0(trimws(format(abs(y), nsmall = 1)), "S"))
-    } else {
-      return(paste0(trimws(format(y, nsmall = 1)), "N"))
-    }
-  }
-  yv = myfun(y)
-  return(paste0("/Y/(", yv, ")VALUES"))
-}
-
-#' @param x
-#' @param xc Numeric.
-#' @param yc Numeric.
-filter_point <- function(x, xc, yc) {
-  X = filter_x_point(xmin, xmax)
-  Y = filter_y_point(ymin, ymax)
-  x$url$x = X
-  x$url$y = Y
-  x$spec$X = c(xmin, xmax)
-  x$spec$Y = c(ymin, ymax)
-  x
-}
-
-## filter <- function(x, members, lead_times, xcoord, ycoord, xmin, xmax, ymin, ymax, ...) {
-##   x
-## }
 
 check_model <- function(model, config) {
   if (!model %in% names(config)) {
@@ -200,81 +70,25 @@ check_model <- function(model, config) {
   TRUE
 }
 
-check_simulation_type <- function(simulation_type, model, config) {
-  if (!simulation_type %in% names(config[[model]])) {
+check_simulation_type <- function(simulation_type, config) {
+  if (!simulation_type %in% names(config)) {
     stop(sprintf("`simulation_type` %s not yet supported!", simulation_type))
   }
   TRUE
 }
 
-check_dataset <- function(dataset, simulation_type, model, config) {
-  if (!dataset %in% names(config[[model]][[simulation_type]])) {
+check_dataset <- function(dataset, config) {
+  if (!dataset %in% names(config)) {
     stop(sprintf("`dataset` %s not yet supported!", dataset))
   }
   TRUE
 }
 
-check_variable <- function(variable, model_config) {
-  if (!is.na(variable)) {
-    if (!all(variable %in% model_spec$variables)) {
-      stop("Some `variables` are invalid!")
-    }
+check_variable <- function(variable, config) {
+  if (!all(variable %in% config$variables)) {
+    stop("Some `variables` are invalid!")
   }
   TRUE
-}
-
-check_members <- function(members, model_config) {
-  if (!is.na(members)) {
-    if (!all(members %in% model_spec$members)) {
-      stop("Some `members` are invalid!")
-    }
-  }
-  TRUE
-}
-
-check_lead_times <- function(lead_times, model_config) {
-  if (!is.na(lead_times)) {
-    if (!lead_times %in% model_spec$lead_times) {
-      stop("`start_lead_time` is invalid!")
-    }
-  }
-  TRUE
-}
-
-check_init_times <- function(start_init_time, end_init_time, model_config) {
-  if (!is.na(start_init_time)) {
-    if (start_init_time < model_config$start_init_time) {
-      stop(
-        "`start_init_time` is invalid: earliest available time is %s.",
-        as.character(model_config$start_init_time)
-      )
-    }
-  }
-  if (!is.na(end_init_time)) {
-    if (end_init_time > model_config$end_init_time) {
-      stop(
-        "`end_init_time` is invalid: latest available time is %s.",
-        as.character(model_config$end_init_time)
-      )
-    }
-  }
-  TRUE
-}
-
-get_model_config <- function(model, simulation_type, dataset, config, check = TRUE) {
-  ## Apply consistent formatting
-  model <- tolower(model)
-  simulation_type <- tolower(simulation_type)
-  dataset <- tolower(dataset)
-  ## variable <- tolower(variable)
-  if (check) {
-    c1 = check_model(model, config)
-    c2 = check_simulation_type(simulation_type, model, config)
-    c3 = check_dataset(dataset, simulation_type, model, config)
-    ## TODO logging?
-  }
-  model_config = config[[model]][[simulation_type]][[dataset]]
-  model_config
 }
 
 ## format_lead_times <- function(start_lead_time, end_lead_time, ...) {

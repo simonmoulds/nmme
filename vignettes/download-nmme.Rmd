@@ -1,0 +1,44 @@
+---
+title: "download-nmme"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{download-nmme}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Introduction 
+
+## North Americal Multi-Model Ensemble 
+The North American Multi-Model Ensemble (NMME) is an operational forecast system. 
+
+## IRI/LDEO Climate Data Library
+NMME data is available from the IRI/Lamont Doherty Earth Observatory (LDEO) Climate Data Library, a freely accessible online data repository and analysis tool. The library allows users to subset NMME data over space and time, and select specific ensemble members, lead times, and output variables. Users can also perform more advanced analyses, such as performing correlations between data fields and applying empirical orthogonal functions (EOFs).
+
+## The `nmme` package
+The `nmme` package is designed for R users who wish to download and analyse NMME data in a familiar environment. 
+
+# Example application 
+
+```{r setup}
+library(nmme)
+```
+
+## Downloading data 
+
+```{r}
+x <- 1:10
+x
+```
+## Compute EOFs 
+
+```{r}
+library(metR)
+```

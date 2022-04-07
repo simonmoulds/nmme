@@ -1,6 +1,38 @@
+#' Filter nmme object.
+#'
+#' @param .data nmme object.
+#' @inheritDotParams filter_init_time -.data
+#' @inheritDotParams filter_member -.data
+#' @inheritDotParams filter_lead_time -.data
+#' @inheritDotParams filter_point -.data
+#' @inheritDotParams filter_region -.data
+#' @export
+filter.nmme <- function(.data, ...) {
+  dots = list(...)
+  nms = names(dots)
+  x <- .data
+  if ("start_init_time" %in% nms & "end_init_time" %in% nms)
+    x <- filter_init_time(x, dots$start_init_time, dots$end_init_time)
+  if ("members" %in% nms)
+    x <- filter_member(x, dots$members)
+  if ("lead_times" %in% nms)
+    x <- filter_lead_time(x, dots$lead_times)
+  use_filter_point = all(c("xcoord", "ycoord") %in% nms)
+  use_filter_region = all(c("xmin", "xmax", "ymin", "ymax") %in% nms)
+  if (use_filter_point & use_filter_region) {
+    stop("Cannot specify spatial point (`xcoord` and `ycoord`) and region (`xmin`, `xmax`, `ymin`, `ymax`)")
+  }
+  if (use_filter_point)
+    x <- filter_point(x, dots$xcoord, dots$ycoord)
+  if (use_filter_region)
+    x <- filter_region(x, dots$xmin, dots$xmax, dots$ymin, dots$ymax)
+  ## x <- x %>% construct_urls()
+  x
+}
+
 #' Filter by initialization time
 #'
-#' @param x
+#' @param .data nmme object.
 #' @param start_init_time zoo::yearmon. Start initialization time.
 #' @param end_init_time zoo::yearmon. End initialization time.
 #'
@@ -10,10 +42,8 @@
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_init_time <- function(x,
-                             start_init_time = as.yearmon("2000-01"),
-                             end_init_time = as.yearmon("2000-02")) {
-
+filter_init_time <- function(.data, start_init_time, end_init_time) {
+  x <- .data
   start_init_time = zoo::as.yearmon(start_init_time)
   end_init_time = zoo::as.yearmon(end_init_time)
   check_init_times(start_init_time, end_init_time, x$config)
@@ -32,7 +62,7 @@ filter_init_time <- function(x,
 
 #' Filter by members
 #'
-#' @param x
+#' @param .data nmme object.
 #' @param members Integer.
 #'
 #' @return List.
@@ -41,12 +71,13 @@ filter_init_time <- function(x,
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_member <- function(x, members) {
+filter_member <- function(.data, members) {
+  x <- .data
   c1 = check_members(members, x$config)
   members = trimws(format(round(members), nsmall = 1))
   M = rep(NA, length(members))
   for (i in 1:length(members)) {
-    M[i] = paste0("/M/(", members[i], ")VALUES")
+    M[i] = paste0("M/(", members[i], ")VALUES")
   }
   member_filter = tibble(name = members, filter = M)
   x$filter$M = member_filter
@@ -55,7 +86,7 @@ filter_member <- function(x, members) {
 
 #' Filter by lead times
 #'
-#' @param x
+#' @param .data nmme object.
 #' @param lead_times Numeric.
 #'
 #' @return List.
@@ -64,15 +95,16 @@ filter_member <- function(x, members) {
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_lead_time <- function(x, lead_times) {
+filter_lead_time <- function(.data, lead_times) {
+  x <- .data
   lead_times = sort(lead_times)
   c1 = check_lead_times(lead_times, x$config)
   lead_times = trimws(format(lead_times, nsmall = 1))
   lead_times_joined = paste0(lead_times, collapse = ", ")
-  L = paste0("/L/(", lead_times_joined, ")VALUES")
+  L = paste0("L/(", lead_times_joined, ")VALUES")
   ## x$url$lead_times = L
   ## x$spec$lead_times = lead_times
-  lead_time_filter = tibble(name = lead_times, filter = L)
+  lead_time_filter = tibble(name = lead_times_joined, filter = L, min_lead_time = min(lead_times), max_lead_time = max(lead_times))
   x$filter$L = lead_time_filter
   x
 }
@@ -126,7 +158,7 @@ filter_x_range <- function(xmin, xmax) {
     stop("`xmin` must be less than `xmax`")
   xmn = format_xmin_coord(xmin)
   xmx = format_xmax_coord(xmax)
-  return(paste0("/X/(", xmn, ")", "(", xmx, ")RANGEEDGES"))
+  return(paste0("X/(", xmn, ")", "(", xmx, ")RANGEEDGES"))
 }
 
 filter_y_range <- function(ymin, ymax) {
@@ -134,12 +166,12 @@ filter_y_range <- function(ymin, ymax) {
     stop("`ymin` must be less than `ymax`")
   ymn = format_y_coord(ymin)
   ymx = format_y_coord(ymax)
-  return(paste0("/Y/(", ymn, ")", "(", ymx, ")RANGEEDGES"))
+  return(paste0("Y/(", ymn, ")", "(", ymx, ")RANGEEDGES"))
 }
 
 #' Filter by region.
 #'
-#' @param x
+#' @param .data nmme object.
 #' @param xmin Numeric.
 #' @param xmax Numeric.
 #' @param ymin Numeric.
@@ -151,8 +183,9 @@ filter_y_range <- function(ymin, ymax) {
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_region <- function(x, xmin, xmax, ymin, ymax) {
+filter_region <- function(.data, xmin, xmax, ymin, ymax) {
   ## TODO check extent is valid - are all models global?
+  x <- .data
   X = filter_x_range(xmin, xmax)
   Y = filter_y_range(ymin, ymax)
   xnm = paste0(format_x_coord(xmin), "-", format_x_coord(xmax))
@@ -166,17 +199,17 @@ filter_region <- function(x, xmin, xmax, ymin, ymax) {
 
 filter_x_point <- function(xcoord) {
   xv = format_x_coord(xcoord)
-  return(paste0("/X/(", xv, ")VALUES"))
+  return(paste0("X/(", xv, ")VALUES"))
 }
 
 filter_y_point <- function(ycoord) {
   yv = format_y_coord(ycoord)
-  return(paste0("/Y/(", yv, ")VALUES"))
+  return(paste0("Y/(", yv, ")VALUES"))
 }
 
 #' Filter by point.
 #'
-#' @param x
+#' @param .data nmme object.
 #' @param xcoord Numeric.
 #' @param ycoord Numeric.
 #'
@@ -186,7 +219,8 @@ filter_y_point <- function(ycoord) {
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_point <- function(x, xcoord, ycoord) {
+filter_point <- function(.data, xcoord, ycoord) {
+  x <- .data
   X = filter_x_point(xcoord)
   Y = filter_y_point(ycoord)
   x_filter = tibble(name = format_x_coord(xcoord), filter = X)

@@ -9,7 +9,7 @@
 #'   if it doesn't already exist.
 #' @param overwrite Logical. Whether or not files should be downloaded
 #'   again if they already exist.
-#' @param ... Additional arguments.
+#' @param ... Additional arguments to download.file.
 #'
 #' @return NULL.
 #'
@@ -22,39 +22,33 @@ download_nmme <- function(x,
                           destdir = ".",
                           overwrite = FALSE, ...) {
 
-  base_url = iri_spec$base_url
-  source = x$url$source
-  variable = x$url$variable
-  init_times = x$url$init_times
-  members = x$url$members
-  for (i in 1:length(init_times)) {
-    for (j in 1:length(members)) {
-      destfile = file.path(destdir, urls[[i]][2])
-      download.file(url, destfile=destfile, ...)
+  urls = x %>% construct_urls()
+  n_urls = nrow(urls)
+  for (i in 1:n_urls) {
+    url = urls$url[i]
+    destfile = file.path(destdir, urls$destfile[i])
+    if (overwrite | !file.exists(destfile)) {
+      download.file(url, destfile, ...)
     }
   }
   NULL
 }
 
 get_forecast_start <- function(init_time, lead_time) {
-  tm = paste(init_time, "01", sep = "") %>% as.Date(format = "%Y%m%d")
-  lead_time = as.numeric(lead_time)
-  fcst_start = tm + month(ceiling(min(lead_time))) - month(1)
-  ## fcst_end = tm + month(ceiling(max(lead_time))) - month(1)
-  fcst_start
+  tm = as.yearmon(init_time, format = "%Y%m")
+  n_month = ceiling(min(lead_time)) - 1
+  fcst_start = tm + (n_month / 12)
+  fcst_start %>% format("%Y%m")
 }
 
 get_forecast_end <- function(init_time, lead_time) {
-  tm = paste(init_time, "01", sep = "") %>% as.Date(format = "%Y%m%d")
-  lead_time = as.numeric(lead_time)
-  fcst_end = tm + month(ceiling(max(lead_time))) - month(1)
-  fcst_end
+  tm = as.yearmon(init_time, format = "%Y%m")
+  n_month = ceiling(max(lead_time)) - 1
+  fcst_end = tm + (n_month / 12)
+  fcst_end %>% format("%Y%m")
 }
 
 construct_urls <- function(x) {
-
-  ## TODO this needs a lot more work!
-
   base_url = paste(
     iri_spec$base_url,
     x$dataset$source$filter,
@@ -66,40 +60,62 @@ construct_urls <- function(x) {
   )
   init_times = x$filter$S
   members = x$filter$M
-  n_init_times = length(init_times)
-  n_members = length(members)
+  n_init_times = nrow(init_times)
+  n_members = nrow(members)
+
+  ## Pull out the other filters
   Y = x$filter$Y
   X = x$filter$X
   L = x$filter$L
-  if (all(is.na(L)))
-    L = x$config$lead_times
+  if (all(is.na(L))) {
+    ## We need to know the min/max lead times
+    min_lead_time = min(x$config$lead_times)
+    max_lead_time = max(x$config$lead_times)
+  } else {
+    min_lead_time = as.numeric(L$min_lead_time)
+    max_lead_time = as.numeric(L$max_lead_time)
+  }
 
-  urls = list()
+  n_urls = n_init_times * n_members
+  urls = rep(NA, n_urls)
+  destfiles = rep(NA, n_urls)
+  indx = 1
   for (i in 1:n_init_times) {
     S = init_times$filter[i]
     init_time = init_times$name[i]
+    forecast_start = get_forecast_start(init_time, min_lead_time)
+    forecast_end = get_forecast_end(init_time, max_lead_time)
     for (j in 1:n_members) {
       M = members$filter[i]
       member = members$name[i]
       ## URL order: Y/S/X/L/M
       url = base_url
-      url = ifelse(is.na(Y), url, paste0(url, "/", Y))
+      url = ifelse(isTRUE(is.na(Y)), url, paste0(url, "/", Y$filter))
       url = paste0(url, "/", S)
-      url = ifelse(is.na(X), url, paste0(url, "/", X))
-      url = ifelse(is.na(L), url, paste0(url, "/", L))
+      url = ifelse(isTRUE(is.na(X)), url, paste0(url, "/", X$filter))
+      url = ifelse(isTRUE(is.na(L)), url, paste0(url, "/", L$filter))
       url = paste0(url, "/", M)
+      url = paste0(url, "/data.nc")
+      url = gsub("(/)\\1+", "\\1", url)
+      url = gsub(" ", "%20", url)
+      url = gsub(",", "%2C", url)
 
       ## Filename
       destfile = paste0(
         x$dataset$variable$name, "_",
         x$dataset$model$name, "_",
         init_time, "_",
-        member, "_")
+        member, "_",
+        forecast_start, "-",
+        forecast_end, ".nc"
+      )
+      urls[indx] = url
+      destfiles[indx] = destfile
+      indx = indx + 1
     }
   }
-  NULL
-}
-
-construct_filename <- function(...) {
-  NULL
+  urls = tibble(url = urls, destfile = destfiles)
+  urls
+  ## x$urls = urls
+  ## x
 }

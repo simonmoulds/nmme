@@ -1,40 +1,67 @@
-#' Filter nmme object.
+#' Subset nmme object.
 #'
-#' @param .data nmme object.
-#' @inheritDotParams filter_init_time -.data
-#' @inheritDotParams filter_member -.data
-#' @inheritDotParams filter_lead_time -.data
-#' @inheritDotParams filter_point -.data
-#' @inheritDotParams filter_region -.data
+#' @param x nmme object.
+#' @inheritDotParams subset_init_times
+#' @inheritDotParams subset_members
+#' @inheritDotParams subset_lead_times
+#' @inheritDotParams subset_point
+#' @inheritDotParams subset_region
+subset <- function(x, ...) {
+  UseMethod("subset")
+}
+
 #' @export
-filter.nmme <- function(.data, ...) {
+subset.nmme <- function(x, ...) {
   dots = list(...)
   nms = names(dots)
-  x <- .data
+  x <- x
   if ("start_init_time" %in% nms & "end_init_time" %in% nms)
-    x <- filter_init_time(x, dots$start_init_time, dots$end_init_time)
+    x$dataset$S <- subset_init_times(dots$start_init_time, dots$end_init_time, x$config)
   if ("members" %in% nms)
-    x <- filter_member(x, dots$members)
+    x$dataset$M <- subset_members(dots$members, x$config)
   if ("lead_times" %in% nms)
-    x <- filter_lead_time(x, dots$lead_times)
-  use_filter_point = all(c("xcoord", "ycoord") %in% nms)
-  use_filter_region = all(c("xmin", "xmax", "ymin", "ymax") %in% nms)
-  if (use_filter_point & use_filter_region) {
+    x$dataset$L <- subset_lead_times(dots$lead_times, x$config)
+  use_subset_point = all(c("xcoord", "ycoord") %in% nms)
+  use_subset_region = all(c("xmin", "xmax", "ymin", "ymax") %in% nms)
+  if (use_subset_point & use_subset_region) {
     stop("Cannot specify spatial point (`xcoord` and `ycoord`) and region (`xmin`, `xmax`, `ymin`, `ymax`)")
   }
-  if (use_filter_point)
-    x <- filter_point(x, dots$xcoord, dots$ycoord)
-  if (use_filter_region)
-    x <- filter_region(x, dots$xmin, dots$xmax, dots$ymin, dots$ymax)
-  ## x <- x %>% construct_urls()
+  if (use_subset_point) {
+    point_selection <- subset_point(dots$xcoord, dots$ycoord)
+  }
+  if (use_subset_region) {
+    region_selection <- subset_region(dots$xmin, dots$xmax, dots$ymin, dots$ymax)
+    x$dataset$X <- region_selection$X
+    x$dataset$Y <- region_selection$Y
+  }
+  x <- reindex(x)
   x
 }
 
-#' Filter by initialization time
+#' @export
+`[.nmme` <- function(x, i) {
+  indices <- x$index[i,]
+  init_time_index <- indices$init_time_index
+  member_index <- indices$member_index
+  ## init_time_index <- x$index$init_time_index[i] %>% unique()
+  ## member_index <- x$index$member_index[i] %>% unique()
+  S = x$dataset$S
+  M = x$dataset$M
+  S$subset <- S$subset[init_time_index]
+  S$ext <- S$ext[init_time_index]
+  M$subset <- M$subset[member_index]
+  M$ext <- M$ext[member_index]
+  x$dataset$S <- S
+  x$dataset$M <- M
+  x <- reindex(x)
+  x
+}
+
+#' Subset by initialization time
 #'
-#' @param .data nmme object.
 #' @param start_init_time zoo::yearmon. Start initialization time.
 #' @param end_init_time zoo::yearmon. End initialization time.
+#' @param config TODO.
 #'
 #' @return List.
 #'
@@ -42,11 +69,10 @@ filter.nmme <- function(.data, ...) {
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_init_time <- function(.data, start_init_time, end_init_time) {
-  x <- .data
+subset_init_times <- function(start_init_time, end_init_time, config) {
   start_init_time = zoo::as.yearmon(start_init_time)
   end_init_time = zoo::as.yearmon(end_init_time)
-  check_init_times(start_init_time, end_init_time, x$config)
+  check_init_times(start_init_time, end_init_time, config)
   init_times = seq(as.Date.yearmon(start_init_time), as.Date.yearmon(end_init_time), by = "month")
   S = rep(NA, length(init_times))
   for (i in 1:length(init_times)) {
@@ -55,15 +81,14 @@ filter_init_time <- function(.data, start_init_time, end_init_time) {
     year = format(tm, "%Y")
     S[i] = paste0("S/(0000 1 ", month, " ", year, ")VALUES")
   }
-  init_time_filter = tibble(name = init_times %>% format("%Y%m"), filter = S)
-  x$filter$S = init_time_filter
-  x
+  nms <- init_times %>% format("%Y%m")
+  return(list(subset = nms, ext = S))
 }
 
-#' Filter by members
+#' Subset by members
 #'
-#' @param .data nmme object.
 #' @param members Integer.
+#' @param config TODO
 #'
 #' @return List.
 #'
@@ -71,23 +96,20 @@ filter_init_time <- function(.data, start_init_time, end_init_time) {
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_member <- function(.data, members) {
-  x <- .data
-  c1 = check_members(members, x$config)
+subset_members <- function(members, config) {
+  c1 = check_members(members, config)
   members = trimws(format(round(members), nsmall = 1))
   M = rep(NA, length(members))
   for (i in 1:length(members)) {
     M[i] = paste0("M/(", members[i], ")VALUES")
   }
-  member_filter = tibble(name = members, filter = M)
-  x$filter$M = member_filter
-  x
+  return(list(subset = members, ext = M))
 }
 
-#' Filter by lead times
+#' Subset by lead times
 #'
-#' @param .data nmme object.
 #' @param lead_times Numeric.
+#' @param config TODO
 #'
 #' @return List.
 #'
@@ -95,22 +117,19 @@ filter_member <- function(.data, members) {
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_lead_time <- function(.data, lead_times) {
-  x <- .data
+subset_lead_times <- function(lead_times, config) {
   lead_times = sort(lead_times)
-  c1 = check_lead_times(lead_times, x$config)
-  lead_times = trimws(format(lead_times, nsmall = 1))
-  lead_times_joined = paste0(lead_times, collapse = ", ")
+  c1 = check_lead_times(lead_times, config)
+  ## lead_times = trimws(format(lead_times, nsmall = 1))
+  lead_times_joined = paste0(trimws(format(lead_times, nsmall = 1)), collapse = ", ")
   L = paste0("L/(", lead_times_joined, ")VALUES")
   ## x$url$lead_times = L
   ## x$spec$lead_times = lead_times
-  lead_time_filter = tibble(name = lead_times_joined, filter = L, min_lead_time = min(lead_times), max_lead_time = max(lead_times))
-  x$filter$L = lead_time_filter
-  x
+  return(list(subset = lead_times, ext = L))
 }
 
 format_y_coord <- function(ycoord) {
-  if (xcoord == 0) {
+  if (ycoord == 0) {
     yv = "0"
   } else if (ycoord < 0) {
     yv = paste0(trimws(format(abs(ycoord), nsmall = 1)), "S")
@@ -152,7 +171,7 @@ format_xmax_coord <- function(xmax) {
   return(xmx)
 }
 
-filter_x_range <- function(xmin, xmax) {
+subset_x_range <- function(xmin, xmax) {
   ## "longitude is best specified as west to east, two east values or two west values, otherwise you can end up with the wrong half of the world (e.g. 0.5E to 355.5E will work much better than 0.5E to 0.5W)"
   if (xmin > xmax)
     stop("`xmin` must be less than `xmax`")
@@ -161,7 +180,7 @@ filter_x_range <- function(xmin, xmax) {
   return(paste0("X/(", xmn, ")", "(", xmx, ")RANGEEDGES"))
 }
 
-filter_y_range <- function(ymin, ymax) {
+subset_y_range <- function(ymin, ymax) {
   if (ymin > ymax)
     stop("`ymin` must be less than `ymax`")
   ymn = format_y_coord(ymin)
@@ -169,9 +188,8 @@ filter_y_range <- function(ymin, ymax) {
   return(paste0("Y/(", ymn, ")", "(", ymx, ")RANGEEDGES"))
 }
 
-#' Filter by region.
+#' Subset by region.
 #'
-#' @param .data nmme object.
 #' @param xmin Numeric.
 #' @param xmax Numeric.
 #' @param ymin Numeric.
@@ -183,33 +201,29 @@ filter_y_range <- function(ymin, ymax) {
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_region <- function(.data, xmin, xmax, ymin, ymax) {
+subset_region <- function(xmin, xmax, ymin, ymax) {
   ## TODO check extent is valid - are all models global?
-  x <- .data
-  X = filter_x_range(xmin, xmax)
-  Y = filter_y_range(ymin, ymax)
+  X = subset_x_range(xmin, xmax)
+  Y = subset_y_range(ymin, ymax)
   xnm = paste0(format_x_coord(xmin), "-", format_x_coord(xmax))
   ynm = paste0(format_y_coord(ymin), "-", format_y_coord(ymax))
-  x_filter = tibble(name = xnm, filter = X)
-  y_filter = tibble(name = ynm, filter = Y)
-  x$filter$X = x_filter
-  x$filter$Y = y_filter
-  x
+  x_subset = list(subset = xnm, ext = X)
+  y_subset = list(subset = ynm, ext = Y)
+  return(list(X = x_subset, Y = y_subset))
 }
 
-filter_x_point <- function(xcoord) {
+subset_x_point <- function(xcoord) {
   xv = format_x_coord(xcoord)
   return(paste0("X/(", xv, ")VALUES"))
 }
 
-filter_y_point <- function(ycoord) {
+subset_y_point <- function(ycoord) {
   yv = format_y_coord(ycoord)
   return(paste0("Y/(", yv, ")VALUES"))
 }
 
-#' Filter by point.
+#' Subset by point.
 #'
-#' @param .data nmme object.
 #' @param xcoord Numeric.
 #' @param ycoord Numeric.
 #'
@@ -219,43 +233,10 @@ filter_y_point <- function(ycoord) {
 #' \dontrun{
 #' print("Hello, world!")
 #' }
-filter_point <- function(.data, xcoord, ycoord) {
-  x <- .data
-  X = filter_x_point(xcoord)
-  Y = filter_y_point(ycoord)
-  x_filter = tibble(name = format_x_coord(xcoord), filter = X)
-  y_filter = tibble(name = format_y_coord(ycoord), filter = Y)
-  x$filter$X = x_filter
-  x$filter$Y = y_filter
-  x
-}
-
-check_members <- function(members, model_config) {
-  if (!all(members %in% model_config$members)) {
-    stop("Some `members` are invalid!")
-  }
-  TRUE
-}
-
-check_lead_times <- function(lead_times, model_config) {
-  if (!all(lead_times %in% model_config$lead_times)) {
-    stop("`start_lead_time` is invalid!")
-  }
-  TRUE
-}
-
-check_init_times <- function(start_init_time, end_init_time, model_config) {
-  if (start_init_time < model_config$start_init_time) {
-    stop(
-      "`start_init_time` is invalid: earliest available time is %s.",
-      as.character(model_config$start_init_time)
-    )
-  }
-  if (end_init_time > model_config$end_init_time) {
-    stop(
-      "`end_init_time` is invalid: latest available time is %s.",
-      as.character(model_config$end_init_time)
-    )
-  }
-  TRUE
+subset_point <- function(xcoord, ycoord) {
+  X = subset_x_point(xcoord)
+  Y = subset_y_point(ycoord)
+  x_subset = tibble(subset = format_x_coord(xcoord), ext = X)
+  y_subset = tibble(subset = format_y_coord(ycoord), ext = Y)
+  return(list(X = x_subset, Y = y_subset))
 }

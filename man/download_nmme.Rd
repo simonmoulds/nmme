@@ -4,20 +4,15 @@
 \alias{download_nmme}
 \title{NMME URLs}
 \usage{
-download_nmme(x, destdir = ".", overwrite = FALSE, ...)
+download_nmme(x, overwrite = FALSE, ...)
 }
 \arguments{
-\item{destdir}{Character. Destination directory, which is created
-if it doesn't already exist.}
+\item{x}{nmme.}
 
 \item{overwrite}{Logical. Whether or not files should be downloaded
 again if they already exist.}
 
 \item{...}{Additional arguments to download.file.}
-
-\item{urls}{List of character pairs. The first value of each pair
-should be the URL, the second value should be the destination
-filename.}
 }
 \value{
 NULL.
@@ -27,7 +22,7 @@ This function returns a character vector of NMME URLs.
 }
 \examples{
 \dontrun{
-urls = name_urls()
-download_nmme(urls[1])
+x <- nmme()
+download_nmme(x[1,1,1])
 }
 }

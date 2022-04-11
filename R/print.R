@@ -1,11 +1,12 @@
 #' @export
 print.nmme <- function(x, ...) {
   n_init_times <- length(x$dataset$S$subset)
-  init_start <- x$dataset$S$subset[1]
-  init_end <- rev(x$dataset$S$subset)[1]
+  init_start <- x$dataset$S$subset[1] %>% format("%b %Y")
+  init_end <- rev(x$dataset$S$subset)[1] %>% format("%b %Y")
   members <- format_members(x)
   n_members <- length(x$dataset$M$subset)
   lead_times <- format_lead_times(x)
+  n_lead_times <- length(x$dataset$L$subset)
   if (isTRUE(is.na(x$dataset$X))) {
     spatial_selection <- "Global"
   } else {
@@ -13,7 +14,7 @@ print.nmme <- function(x, ...) {
     y_spatial_selection <- x$dataset$Y$subset
     spatial_selection <- paste0(x_spatial_selection, ", ", y_spatial_selection)
   }
-  n_files <- n_init_times * n_members
+  n_files <- n_init_times * n_members * n_lead_times
   cat("Model             :", x$dataset$model$subset, "\n")
   cat("Variable          :", x$dataset$variable$subset, "\n")
   cat("Simulation type   :", x$dataset$simulation_type$subset, "\n")

@@ -2,11 +2,7 @@
 #'
 #' This function returns a character vector of NMME URLs.
 #'
-#' @param urls List of character pairs. The first value of each pair
-#'   should be the URL, the second value should be the destination
-#'   filename.
-#' @param destdir Character. Destination directory, which is created
-#'   if it doesn't already exist.
+#' @param x nmme.
 #' @param overwrite Logical. Whether or not files should be downloaded
 #'   again if they already exist.
 #' @param ... Additional arguments to download.file.
@@ -15,22 +11,20 @@
 #'
 #' @examples
 #' \dontrun{
-#' urls = name_urls()
-#' download_nmme(urls[1])
+#' x <- nmme()
+#' download_nmme(x[1,1,1])
 #' }
 download_nmme <- function(x,
-                          destdir = ".",
                           overwrite = FALSE, ...) {
-
-  urls = x %>% construct_urls()
-  n_urls = nrow(urls)
+  n_urls = nrow(x$index)
   for (i in 1:n_urls) {
-    url = urls$url[i]
-    destfile = file.path(destdir, urls$destfile[i])
-    if (overwrite | !file.exists(destfile)) {
+    url <- x$index$url[i]
+    destfile <- x$index$destfile[i]
+    exists <- x$index$exists[i]
+    if (overwrite | !exists) {
       download.file(url, destfile, ...)
     }
   }
-  NULL
+  x <- nmme_reindex(x)
+  return(x)
 }
-

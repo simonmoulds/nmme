@@ -9,6 +9,7 @@ nmme(
   simulation_type = "hindcast",
   dataset = "monthly",
   variable = "prec",
+  destdir = ".",
   config = nmme_config(),
   ...
 )

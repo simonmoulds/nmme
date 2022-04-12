@@ -4,12 +4,12 @@
 \alias{nmme_index}
 \title{Index URLs}
 \usage{
-nmme_index(x, dir, ...)
+nmme_index(x, location, ...)
 }
 \arguments{
 \item{x}{nmme object.}
 
-\item{dir}{character.}
+\item{location}{character.}
 
 \item{...}{Additional arguments.}
 }

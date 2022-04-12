@@ -17,15 +17,20 @@ dim(x)
 x %>% nmme_subset(members = c(1:5))
 
 ## Or by space:
-xx <- x %>% nmme_subset(xmin = 5, xmax = 10, ymin = 5, ymax = 10)
+x %>% nmme_subset(xmin = 5, xmax = 10, ymin = 5, ymax = 10)
 
 ## Or both at once:
-x %>% nmme_subset(members = c(1:5), xmin = 5, xmax = 10, ymin = 5, ymax = 10)
+x %>% nmme_subset(members = c(1:5), xmin = 5, xmax = 10, ymin = 5, ymax = 10) %>% dim()
 
 ## Alternatively, we can subset URLs with the `[` generic:
 x[1,]
 x[1:10,]
 x[1,1:5,1:3]
+
+## We can also construct a spatial subset using the `nmme_x_index(...)` helper:
+x_indx <- nmme_x_index(x, xmin = 0, xmax = 40)
+y_indx <- nmme_y_index(x, ymin = -10, ymax = 30)
+x[,,,x_indx,y_indx]
 
 ## Once you are happy with the selection you can download the files:
 x_test <- x[1,1,1]

@@ -48,7 +48,7 @@ members <- function(x) return(x$dataset$M$subset)
 lead_times <- function(x) return(x$dataset$L$subset)
 
 #' @export
-`[.nmme` <- function(x, i, j, k, drop = FALSE, ...) {
+`[.nmme` <- function(x, i, j, k, m, n, drop = FALSE, ...) {
   ## See https://github.com/tidyverse/tibble/blob/main/R/subsetting.R
   if (missing(i)) {
     i <- NULL
@@ -66,6 +66,18 @@ lead_times <- function(x) return(x$dataset$L$subset)
     k <- NULL
   } else if (is.null(k)) {
     k <- integer()
+  }
+
+  if (missing(m)) {
+    m <- NULL
+  } else if (is.null(m)) {
+    m <- integer()
+  }
+
+  if (missing(n)) {
+    n <- NULL
+  } else if (is.null(n)) {
+    n <- integer()
   }
 
   ## arg_list = list()
@@ -92,10 +104,42 @@ lead_times <- function(x) return(x$dataset$L$subset)
     L$ext <- nmme_lead_times_ext(L$subset)
   }
 
+  X <- x$dataset$X
+  if (!is.null(m)) {
+    x_coords <- X$subset
+    x_index <- m
+    ## x_index <- nmme_x_index(x, xcoord = m)
+    if (all(diff(x_index) == 1)) {
+      xmin = min(x_coords[x_index])
+      xmax = max(x_coords[x_index])
+      X <- nmme_subset_x_range(xmin, xmax)
+    } else {
+      x_coords_new <- x_coords[x_index] %>% sort()
+      X <- nmme_subset_x_point(xcoord = x_coords_new)
+    }
+  }
+
+  Y <- x$dataset$Y
+  if (!is.null(n)) {
+    y_coords <- Y$subset
+    y_index <- n
+    ## y_index <- nmme_y_index(x, ycoord = n)
+    if (all(diff(y_index) == 1)) {
+      ymin = min(y_coords[y_index])
+      ymax = max(y_coords[y_index])
+      Y <- nmme_subset_y_range(ymin, ymax)
+    } else {
+      y_coords_new <- y_coords[y_index] %>% sort()
+      Y <- nmme_subset_y_point(ycoord = y_coords_new)
+    }
+  }
+
   x$dataset$S <- S
   x$dataset$M <- M
   x$dataset$L <- L
-  x <- nmme_reindex(x)
+  x$dataset$X <- X
+  x$dataset$Y <- Y
+  x <- nmme_reindex(x) # This will update URL request
   x
 }
 
@@ -124,8 +168,6 @@ nmme_lead_times_ext <- function(lead_times, ...) {
   for (i in 1:length(lead_times)) {
     L[i] <- paste0("L/(", lead_times[i], ")VALUES")
   }
-  ## lead_times_joined = paste0(trimws(format(lead_times, nsmall = 1)), collapse = ", ")
-  ## L = paste0("L/(", lead_times_joined, ")VALUES")
   return(L)
 }
 
@@ -147,16 +189,8 @@ nmme_subset_init_times <- function(start_init_time, end_init_time, config) {
   check_init_times(start_init_time, end_init_time, config)
   init_times <- seq(as.Date.yearmon(start_init_time), as.Date.yearmon(end_init_time), by = "month")
   ext <- nmme_init_times_ext(init_times)
-  ## S = rep(NA, length(init_times))
-  ## for (i in 1:length(init_times)) {
-  ##   tm = init_times[i]
-  ##   month = format(tm, "%b")
-  ##   year = format(tm, "%Y")
-  ##   S[i] = paste0("S/(0000 1 ", month, " ", year, ")VALUES")
-  ## }
   nms <- init_times %>% format("%Y%m") # FIXME would having a time be better?
   return(list(subset = init_times, ext = ext))
-  ## return(list(subset = nms, ext = ext))
 }
 
 #' Subset by members
@@ -174,10 +208,6 @@ nmme_subset_members <- function(members, config) {
   c1 = check_members(members, config)
   members = trimws(format(round(members), nsmall = 1))
   ext <- nmme_members_ext(members)
-  ## M = rep(NA, length(members))
-  ## for (i in 1:length(members)) {
-  ##   M[i] = paste0("M/(", members[i], ")VALUES")
-  ## }
   return(list(subset = members, ext = ext))
 }
 
@@ -196,35 +226,10 @@ nmme_subset_lead_times <- function(lead_times, config) {
   lead_times = sort(lead_times)
   c1 = check_lead_times(lead_times, config)
   lead_times = trimws(format(lead_times, nsmall = 1))
-  ## lead_times_joined = paste0(trimws(format(lead_times, nsmall = 1)), collapse = ", ")
-  ## L = paste0("L/(", lead_times_joined, ")VALUES")
-  ## x$url$lead_times = L
-  ## x$spec$lead_times = lead_times
   ext <- nmme_lead_times_ext(lead_times)
   return(list(subset = lead_times, ext = ext))
 }
 
-format_y_coord <- function(ycoord) {
-  if (ycoord == 0) {
-    yv = "0"
-  } else if (ycoord < 0) {
-    yv = paste0(trimws(format(abs(ycoord), nsmall = 1)), "S")
-  } else {
-    yv = paste0(trimws(format(ycoord, nsmall = 1)), "N")
-  }
-  return(yv)
-}
-
-format_x_coord <- function(xcoord) {
-  if (xcoord == 0) {
-    xv = "0"
-  } else if (xcoord < 0) {
-    xv = paste0(trimws(format(abs(xcoord), nsmall = 1)), "W")
-  } else if (xcoord > 0) {
-    xv = paste0(trimws(format(xcoord, nsmall = 1)), "E")
-  }
-  return(xv)
-}
 format_xmin_coord <- function(xmin) {
   if (xmin == 0) {
     xmn = "0"
@@ -249,19 +254,36 @@ format_xmax_coord <- function(xmax) {
 
 nmme_subset_x_range <- function(xmin, xmax) {
   ## "longitude is best specified as west to east, two east values or two west values, otherwise you can end up with the wrong half of the world (e.g. 0.5E to 355.5E will work much better than 0.5E to 0.5W)"
-  if (xmin > xmax)
-    stop("`xmin` must be less than `xmax`")
-  xmn = format_xmin_coord(xmin)
-  xmx = format_xmax_coord(xmax)
-  return(paste0("X/(", xmn, ")", "(", xmx, ")RANGEEDGES"))
+  stopifnot(xmin < xmax)
+  stopifnot(xmin >= -180)
+  stopifnot(xmax <= 180)
+  xmax <- min(xmax, 179)
+  x_coords <- seq(xmin, xmax, 1)
+  complete <- length(x_coords) == 360
+  if (!complete) {
+    xmn <- format_xmin_coord(xmin)
+    xmx <- format_xmax_coord(xmax)
+    ext <- paste0("X/(", xmn, ")", "(", xmx, ")RANGEEDGES")
+  } else {
+    ext <- NULL
+  }
+  return(list(subset = x_coords, ext = ext))
 }
 
 nmme_subset_y_range <- function(ymin, ymax) {
-  if (ymin > ymax)
-    stop("`ymin` must be less than `ymax`")
-  ymn = format_y_coord(ymin)
-  ymx = format_y_coord(ymax)
-  return(paste0("Y/(", ymn, ")", "(", ymx, ")RANGEEDGES"))
+  stopifnot(ymin < ymax)
+  stopifnot(ymin >= -90)
+  stopifnot(ymax <= 90)
+  y_coords <- seq(ymin, ymax, 1)
+  complete <- length(y_coords) == 181
+  if (!complete) {
+    ymn <- format_y_coord(ymin)
+    ymx <- format_y_coord(ymax)
+    ext <- paste0("Y/(", ymn, ")", "(", ymx, ")RANGEEDGES")
+  } else {
+    ext <- NULL
+  }
+  return(list(subset = y_coords, ext = ext))
 }
 
 #' Subset by region.
@@ -281,21 +303,21 @@ nmme_subset_region <- function(xmin, xmax, ymin, ymax) {
   ## TODO check extent is valid - are all models global?
   X = nmme_subset_x_range(xmin, xmax)
   Y = nmme_subset_y_range(ymin, ymax)
-  xnm = paste0(format_x_coord(xmin), "-", format_x_coord(xmax))
-  ynm = paste0(format_y_coord(ymin), "-", format_y_coord(ymax))
-  x_subset = list(subset = xnm, ext = X)
-  y_subset = list(subset = ynm, ext = Y)
-  return(list(X = x_subset, Y = y_subset))
+  return(list(X = X, Y = Y))
 }
 
 nmme_subset_x_point <- function(xcoord) {
-  xv = format_x_coord(xcoord)
-  return(paste0("X/(", xv, ")VALUES"))
+  xcoord <- sort(xcoord)
+  xv <- format_x_coord(xcoord)
+  ext <- paste0("X/(", xv, ")VALUES")
+  return(list(subset = xcoord, ext = ext))
 }
 
 nmme_subset_y_point <- function(ycoord) {
-  yv = format_y_coord(ycoord)
-  return(paste0("Y/(", yv, ")VALUES"))
+  ycoord <- sort(ycoord)
+  yv <- format_y_coord(ycoord)
+  ext <- paste0("Y/(", yv, ")VALUES")
+  return(list(subset = ycoord, ext = ext))
 }
 
 #' Subset by point.
@@ -317,16 +339,49 @@ nmme_subset_point <- function(xcoord, ycoord) {
   return(list(X = x_subset, Y = y_subset))
 }
 
-## nmme_x_index <- function(x, ...) {
-##   nms = names(dots)
-##   if ("xcoord" %in% nms) {
-##     xindex <- round(as.numeric(dots[["xcoord"]])) %% 360
-##   } else if (all(c("xmin", "xmax") %in% nms)) {
-##     xmin <- floor(as.numeric(dots[["xmin"]])) %% 360
-##     xmax <- ceiling(as.numeric(dots[["xmax"]])) %% 360
-##     xindex <- seq(xmin, xmax, 1)
-##   }
-##   ## Now identify the actual index based on `x`
-##   ## TODO
-##   xindex
-## }
+nmme_x_index <- function(x, ...) {
+  dots <- list(...)
+  nms <- names(dots)
+  x_coords <- x$dataset$X$subset
+  if ("xcoord" %in% nms) {
+    x_coords_new <- round(as.numeric(dots[["xcoord"]]))
+  } else if (all(c("xmin", "xmax") %in% nms)) {
+    xmin <- floor(as.numeric(dots[["xmin"]]))
+    xmax <- ceiling(as.numeric(dots[["xmax"]]))
+    stopifnot(xmin < xmax)
+    stopifnot(xmin >= -180)
+    stopifnot(xmax <= 180)
+    xmax <- min(xmax, 179)
+    x_coords_new <- seq(xmin, xmax, 1)
+  } else {
+    warning("Either `xcoord` or `xmin` and `xmax` must be supplied.")
+    return(x_coords)
+  }
+  if (!all(x_coords_new %in% x_coords)) {
+    stop("Index out of range")
+  }
+  return(match(x_coords_new, x_coords))
+}
+
+nmme_y_index <- function(x, ...) {
+  dots <- list(...)
+  nms <- names(dots)
+  y_coords <- x$dataset$Y$subset
+  if ("ycoord" %in% nms) {
+    y_coords_new <- round(as.numeric(dots[["ycoord"]]))
+  } else if (all(c("ymin", "ymax") %in% nms)) {
+    ymin <- floor(as.numeric(dots[["ymin"]]))
+    ymax <- ceiling(as.numeric(dots[["ymax"]]))
+    stopifnot(ymin < ymax)
+    stopifnot(ymin >= -90)
+    stopifnot(ymax <= 90)
+    y_coords_new <- seq(ymin, ymax, 1)
+  } else {
+    warning("Either `ycoord` or `ymin` and `ymax` must be supplied.")
+    return(y_coords)
+  }
+  if (!all(y_coords_new %in% y_coords)) {
+    stop("Index out of range")
+  }
+  return(match(y_coords_new, y_coords))
+}

@@ -42,6 +42,8 @@ nmme <- function(model = "GFDL-SPEAR",
   end_init_time <- model_config$end_init_time
   members <- model_config$members
   lead_times <- model_config$lead_times
+  x_coords <- seq(0, 359)
+  y_coords <- seq(-90, 90)
   if (all(c("start_init_time", "end_init_time") %in% names(dots))) {
     start_init_time <- dots$start_init_time
     end_init_time <- dots$end_init_time
@@ -53,6 +55,8 @@ nmme <- function(model = "GFDL-SPEAR",
   dataset$S <- nmme_subset_init_times(start_init_time, end_init_time, model_config)
   dataset$M <- nmme_subset_members(members, model_config)
   dataset$L <- nmme_subset_lead_times(lead_times, model_config)
+  dataset$X <- nmme_subset_x_range(-180, 179)
+  dataset$Y <- nmme_subset_y_range(-90, 90)
   ## Create object
   obj <- list(location = location, dataset = dataset, config = model_config, index = NA)
   class(obj) <- c("nmme", class(obj))

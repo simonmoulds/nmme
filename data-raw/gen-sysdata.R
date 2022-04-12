@@ -12,7 +12,7 @@ gfdl_spear_spec <- function(...) {
         end_init_time = zoo::as.yearmon("202012", format = "%Y%m"),
         variables = c("h200", "prec", "sst", "T", "t_ref_max", "t_ref_min", "tref"),
         members = seq(1, 15, 1),
-        lead_times = seq(0.5, 11.5, 1)
+        lead_times = seq(0.5, 11.5, 1),
       ),
       mc9120 = list(
         start_init_time = zoo::as.yearmon("199101", format = "%Y%m"),

@@ -24,72 +24,37 @@ nmme_index <- function(x, location, ...) {
   n_init_times = length(S$subset)
   n_members = length(M$subset)
   n_lead_times = length(L$subset)
-  ## L = x$dataset$L
-  ## min_lead_time = min(as.numeric(L$subset))
-  ## max_lead_time = max(as.numeric(L$subset))
-  include_X = !isTRUE(is.na(X))
-  include_Y = !isTRUE(is.na(Y))
-  ## include_L = !(isTRUE(is.na(L)) | (length(L$subset) == length(x$config$lead_times)))
-  ## Construct URLs
-  n_urls = n_init_times * n_members
-  urls = rep(NA, n_urls)
-  destfiles = rep(NA, n_urls)
-  exists = rep(FALSE, n_urls)
-  init_time_index = rep(NA, n_urls)
-  member_index = rep(NA, n_urls)
-  indx = 1
-  ## TODO speed up this loop, which is currently very slow
-  for (i in 1:n_init_times) {
-    init_time_ext = S$ext[i]
-    init_time = S$subset[i]
-    ## forecast_start = get_forecast_start(init_time, min_lead_time)
-    ## forecast_end = get_forecast_end(init_time, max_lead_time)
-    for (j in 1:n_members) {
-      member_ext = M$ext[j]
-      member = M$subset[j]
-      for (k in 1:n_lead_times) {
-        ## URL order: Y/S/X/L/M
-        lead_time_ext <- L$ext[k]
-        lead_time <- as.numeric(L$subset[k])
-        forecast_start = get_forecast_start(init_time, lead_time)
-        forecast_end = get_forecast_end(init_time, lead_time)
-        url = base_url
-        url = ifelse(include_Y, paste0(url, "/", Y$ext), url)
-        url = paste0(url, "/", init_time_ext)
-        url = ifelse(include_X, paste0(url, "/", X$ext), url)
-        ## url = ifelse(include_L, paste0(url, "/", L$ext), url)
-        url = paste0(url, "/", lead_time_ext)
-        url = paste0(url, "/", member_ext)
-        url = paste0(url, "/data.nc")
-        url = gsub("(/)\\1+", "\\1", url)
-        url = gsub(" ", "%20", url)
-        url = gsub(",", "%2C", url)
-        ## Filename
-        destfile = paste0(
-          x$dataset$variable$subset, "_",
-          x$dataset$model$subset, "_",
-          format(init_time, "%Y%m"), "_",
-          member, "_",
-          format(forecast_start, "%Y%m"), "-",
-          format(forecast_end, "%Y%m"), ".nc"
-        )
-        urls[indx] = url
-        destfiles[indx] = file.path(location, destfile)
-        exists[indx] = isTRUE(file.exists(destfiles[indx]))
-        init_time_index[indx] = i
-        member_index[indx] = j
-        indx = indx + 1
-      }
-    }
-  }
-  urls = tibble(
-    url = urls,
-    destfile = destfiles,
-    exists = exists,
-    init_time_index = init_time_index,
-    member_index = member_index
-  )
-  urls
+  include_X = !isTRUE(is.null(X$ext))
+  include_Y = !isTRUE(is.null(Y$ext))
+  ## URL order: Y/S/X/L/M [I don't know whether this makes a difference]
+  url_cols <- c("Y", "S", "X", "L", "M")
+  if (!include_X) url_cols = url_cols[!url_cols %in% "X"]
+  if (!include_Y) url_cols = url_cols[!url_cols %in% "Y"]
+  url <-
+    expand_grid(Y = Y$ext, S = S$ext, X = X$ext, L = L$ext, M = M$ext) %>%
+    unite("URL", url_cols, sep = "/") %>%
+    mutate(URL = paste(base_url, URL, sep="/")) %>%
+    mutate(URL = gsub("(/)\\1+", "\\1", URL)) %>%
+    mutate(URL = gsub(" ", "%20", URL)) %>%
+    mutate(URL = gsub(",", "%2C", URL)) %>%
+    mutate(URL = paste0(URL, "/data.nc"))
+  idx <-
+    expand_grid(
+      variable = gsub("^\\.", "", x$dataset$variable$ext),
+      model = gsub("^\\.", "", x$dataset$model$ext),
+      S = S$subset, L = as.numeric(L$subset), M = M$subset
+    ) %>%
+    mutate(S = as.yearmon(S)) %>%
+    mutate(L0 = S + ((ceiling(L) - 1) / 12)) %>%
+    mutate(S = format(S, "%Y%m")) %>%
+    mutate(L0 = format(L0, "%Y%m")) %>%
+    mutate(L0 = paste0(L0, "-", L0)) %>%
+    unite("destfile", variable, model, S, M, L0, remove = FALSE) %>%
+    mutate(destfile = file.path(location, paste0(destfile, ".nc"))) %>%
+    mutate(exists = file.exists(destfile)) %>%
+    dplyr::select(-L0, -model)
+  idx <- idx %>% mutate(URL = url$URL, .before = "destfile")
+  idx
 }
 
 nmme_reindex <- function(x, ...) {

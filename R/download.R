@@ -18,7 +18,7 @@ download_nmme <- function(x,
                           overwrite = FALSE, ...) {
   n_urls = nrow(x$index)
   for (i in 1:n_urls) {
-    url <- x$index$url[i]
+    url <- x$index$URL[i]
     destfile <- x$index$destfile[i]
     exists <- x$index$exists[i]
     if (overwrite | !exists) {
